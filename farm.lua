@@ -9,7 +9,7 @@ local function InitCandyWaypointFarm()
     local LocalPlayer = Players.LocalPlayer
     if not LocalPlayer then return end
 
-    local WAYPOINT_FILE = "BrazilHub_Waypoints.json"
+    local WAYPOINT_FILE = "https://raw.githubusercontent.com/Scalzerz/xpz/refs/heads/main/BrazilHub_Waypoints.json"
 
     local function LoadWaypoints()
         if typeof(readfile) == "function" and typeof(isfile) == "function" and isfile(WAYPOINT_FILE) then
