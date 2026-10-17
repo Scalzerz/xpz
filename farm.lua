@@ -1,4 +1,8 @@
-
+--[[
+    ========================================================================
+    CANDY & WAYPOINT TP FARM (CLOUD JSON & STABLE TELEPORT VERSION)
+    ========================================================================
+--]]
 
 local function InitCandyWaypointFarm()
     local Players = game:GetService("Players")
@@ -9,16 +13,19 @@ local function InitCandyWaypointFarm()
     local LocalPlayer = Players.LocalPlayer
     if not LocalPlayer then return end
 
-    local WAYPOINT_FILE = "https://raw.githubusercontent.com/Scalzerz/xpz/refs/heads/main/BrazilHub_Waypoints.json"
+    local URL_DO_JSON_RAW = "https://raw.githubusercontent.com/Scalzerz/xpz/refs/heads/main/BrazilHub_Waypoints.json"
 
     local function LoadWaypoints()
-        if typeof(readfile) == "function" and typeof(isfile) == "function" and isfile(WAYPOINT_FILE) then
-            local success, content = pcall(readfile, WAYPOINT_FILE)
-            if success and content then
-                local decodeSuccess, decoded = pcall(function() return HttpService:JSONDecode(content) end)
-                if decodeSuccess and typeof(decoded) == "table" then
-                    return decoded
-                end
+        local success, response = pcall(function()
+            return game:HttpGet(URL_DO_JSON_RAW)
+        end)
+
+        if success and response then
+            local decodeSuccess, decoded = pcall(function()
+                return HttpService:JSONDecode(response)
+            end)
+            if decodeSuccess and typeof(decoded) == "table" then
+                return decoded
             end
         end
         return {}
@@ -243,12 +250,29 @@ local function InitCandyWaypointFarm()
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        local adjustedCFrame = CFrame.new(targetCFrame.Position + Vector3.new(0, 2, 0))
+        local targetPos = targetCFrame.Position + Vector3.new(0, 2, 0)
+
+        pcall(function()
+            if LocalPlayer.RequestStreamAroundAsync then
+                LocalPlayer:RequestStreamAroundAsync(targetPos)
+            end
+        end)
+
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+        local adjustedCFrame = CFrame.new(targetPos)
         if char.PrimaryPart then 
             char:PivotTo(adjustedCFrame) 
         else 
             hrp.CFrame = adjustedCFrame 
         end
+
+        task.defer(function()
+            if hrp and hrp.Parent then
+                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            end
+        end)
     end
 
     local function StopFarmLoop()
