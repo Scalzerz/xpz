@@ -1,6 +1,6 @@
 --[[
     ========================================================================
-    CANDY & WAYPOINT TP FARM (CLOUD JSON & STABLE TELEPORT VERSION)
+    CANDY & WAYPOINT TP FARM (CLOUD JSON & SAFE ANTI-KICK VERSION)
     ========================================================================
 --]]
 
@@ -308,10 +308,13 @@ local function InitCandyWaypointFarm()
                                 end
 
                                 if targetCf then
-                                    StatusLabel.Text = "Status: Coletando Doce"
-                                    StatusLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
-                                    TeleportToCFrame(targetCf)
-                                    task.wait(state.candyDelay)
+                                    -- PROTEÇÃO ANTI-KICK: Ignora doces abaixo do chão/terreno (Y <= -10)
+                                    if targetCf.Position.Y > -10 then
+                                        StatusLabel.Text = "Status: Coletando Doce"
+                                        StatusLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
+                                        TeleportToCFrame(targetCf)
+                                        task.wait(state.candyDelay)
+                                    end
                                 end
                             end
                         end
