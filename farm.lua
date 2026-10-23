@@ -1,6 +1,6 @@
 --[[
     ========================================================================
-    CANDY & WAYPOINT TP FARM (CLOUD JSON & SAFE ANTI-KICK VERSION)
+    CANDY & WAYPOINT TP FARM (CLOUD JSON & SAFE ANTI-KICK V2)
     ========================================================================
 --]]
 
@@ -35,8 +35,8 @@ local function InitCandyWaypointFarm()
         isEnabled = false,
         isMinimized = false,
         farmThread = nil,
-        candyDelay = 0.5,     
-        waypointDelay = 10.0, 
+        candyDelay = 0.4,      
+        waypointDelay = 8.0,   
         waypoints = LoadWaypoints(),
         currentWpIndex = 1,
         connections = {}
@@ -195,8 +195,8 @@ local function InitCandyWaypointFarm()
         return input
     end
 
-    local CandyDelayInput = CreateInputBox("Delay Doces (s)", "0.5", 0)
-    local WpDelayInput = CreateInputBox("Delay Posições (s)", "10.0", 0.52)
+    local CandyDelayInput = CreateInputBox("Delay Doces (s)", "0.4", 0)
+    local WpDelayInput = CreateInputBox("Delay Posições (s)", "8.0", 0.52)
 
     CandyDelayInput.FocusLost:Connect(function()
         local val = tonumber(CandyDelayInput.Text)
@@ -292,34 +292,39 @@ local function InitCandyWaypointFarm()
                     local folder = Workspace:FindFirstChild("HalloweenCandiesLocal")
                     local candies = folder and folder:GetChildren() or {}
 
-                    if #candies > 0 then
-                        -- Modo Doces (Seguro contra modelos sem part direta)
-                        for _, candy in ipairs(candies) do
-                            if not state.isEnabled then break end
-                            if candy and candy.Parent then
-                                local targetCf = nil
-                                if candy:IsA("Model") then
-                                    targetCf = candy:GetPivot()
-                                elseif candy:IsA("BasePart") then
-                                    targetCf = candy.CFrame
-                                else
-                                    local part = candy:FindFirstChildWhichIsA("BasePart", true)
-                                    if part then targetCf = part.CFrame end
-                                end
+                    -- Filtra apenas os doces que estão estritamente acima de Y = -10
+                    local validCandies = {}
+                    for _, candy in ipairs(candies) do
+                        if candy and candy.Parent then
+                            local targetCf = nil
+                            if candy:IsA("Model") then
+                                targetCf = candy:GetPivot()
+                            elseif candy:IsA("BasePart") then
+                                targetCf = candy.CFrame
+                            else
+                                local part = candy:FindFirstChildWhichIsA("BasePart", true)
+                                if part then targetCf = part.CFrame end
+                            end
 
-                                if targetCf then
-                                    -- PROTEÇÃO ANTI-KICK: Ignora doces abaixo do chão/terreno (Y <= -10)
-                                    if targetCf.Position.Y > -10 then
-                                        StatusLabel.Text = "Status: Coletando Doce"
-                                        StatusLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
-                                        TeleportToCFrame(targetCf)
-                                        task.wait(state.candyDelay)
-                                    end
-                                end
+                            if targetCf and targetCf.Position.Y > -10 then
+                                table.insert(validCandies, {instance = candy, cframe = targetCf})
+                            end
+                        end
+                    end
+
+                    if #validCandies > 0 then
+                        -- Coleta os doces válidos encontrados na tela
+                        for _, candyData in ipairs(validCandies) do
+                            if not state.isEnabled then break end
+                            if candyData.instance and candyData.instance.Parent then
+                                StatusLabel.Text = "Status: Coletando Doce"
+                                StatusLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
+                                TeleportToCFrame(candyData.cframe)
+                                task.wait(state.candyDelay)
                             end
                         end
                     else
-                        -- Modo Posições / Waypoints salvos
+                        -- Se não houver doces válidos, avança para as Posições / Waypoints salvos
                         if #state.waypoints > 0 then
                             if state.currentWpIndex > #state.waypoints then 
                                 state.currentWpIndex = 1 
@@ -337,7 +342,7 @@ local function InitCandyWaypointFarm()
                             end
 
                             if targetCFrame then
-                                StatusLabel.Text = string.format("Status: TP Localização (%d/%d)", state.currentWpIndex, #state.waypoints)
+                                StatusLabel.Text = string.format("Status: TP Rota (%d/%d)", state.currentWpIndex, #state.waypoints)
                                 StatusLabel.TextColor3 = Color3.fromRGB(255, 180, 50)
                                 TeleportToCFrame(targetCFrame)
                             end
@@ -347,7 +352,10 @@ local function InitCandyWaypointFarm()
                             local elapsed = 0
                             while state.isEnabled and elapsed < state.waypointDelay do
                                 local currentFolder = Workspace:FindFirstChild("HalloweenCandiesLocal")
-                                if currentFolder and #currentFolder:GetChildren() > 0 then break end
+                                if currentFolder then
+                                    local activeCandies = currentFolder:GetChildren()
+                                    if #activeCandies > 0 then break end
+                                end
                                 task.wait(0.2)
                                 elapsed = elapsed + 0.2
                             end
