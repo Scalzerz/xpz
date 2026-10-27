@@ -1,6 +1,6 @@
 --[[
     ========================================================================
-    CANDY & POTIONS TP FARM (CLOUD JSON & ANTI-VOID MATRIX SAFE)
+    CANDY & POTIONS TP FARM (FIXED WAYPOINT LOOP & TIMER)
     ========================================================================
 --]]
 
@@ -35,8 +35,7 @@ local function InitCandyWaypointFarm()
         isCandyEnabled = false,
         isPotionsEnabled = false,
         isMinimized = false,
-        candyThread = nil,
-        potionsThread = nil,
+        masterThread = nil,
         candyDelay = 0.4,      
         waypointDelay = 8.0,   
         waypoints = LoadWaypoints(),
@@ -149,7 +148,6 @@ local function InitCandyWaypointFarm()
     ContentLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     ContentLayout.Parent = ContentFrame
 
-    -- Botão 1: Auto Farm de Doces + Waypoints
     local ToggleCandyBtn = Instance.new("TextButton")
     ToggleCandyBtn.Size = UDim2.new(1, 0, 0, 30)
     ToggleCandyBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
@@ -161,7 +159,6 @@ local function InitCandyWaypointFarm()
     ToggleCandyBtn.Parent = ContentFrame
     Instance.new("UICorner", ToggleCandyBtn).CornerRadius = UDim.new(0, 6)
 
-    -- Botão 2: Auto Farm de Poções (WerewolfPotionsLocal)
     local TogglePotionsBtn = Instance.new("TextButton")
     TogglePotionsBtn.Size = UDim2.new(1, 0, 0, 30)
     TogglePotionsBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
@@ -317,7 +314,6 @@ local function InitCandyWaypointFarm()
                         yPos = components[2]
                     end
 
-                    -- Trava Y > 0 (Ignora subsolo e void)
                     if yPos and yPos > 0 then
                         table.insert(validItems, {instance = item, cframe = rawCf})
                     end
@@ -327,28 +323,57 @@ local function InitCandyWaypointFarm()
         return validItems
     end
 
-    -- Loop de Doces + Waypoints
-    local function StartCandyLoop()
-        if state.candyThread then task.cancel(state.candyThread) end
-        state.candyThread = task.spawn(function()
-            while state.isCandyEnabled do
+    -- Loop Unificado Mestre para gerenciar Doces, Poções e Waypoints de forma fluida
+    local function StartMasterLoop()
+        if state.masterThread then task.cancel(state.masterThread) end
+        
+        state.masterThread = task.spawn(function()
+            while state.isCandyEnabled or state.isPotionsEnabled do
                 pcall(function()
                     state.waypoints = LoadWaypoints()
-                    local validCandies = GetValidItems("HalloweenCandiesLocal")
+                    local didAction = false
 
-                    if #validCandies > 0 then
-                        for _, data in ipairs(validCandies) do
-                            if not state.isCandyEnabled then break end
-                            if data.instance and data.instance.Parent then
-                                StatusLabel.Text = "Status: Coletando Doce 🍬"
-                                StatusLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
-                                TeleportToCFrame(data.cframe)
-                                task.wait(state.candyDelay)
+                    -- 1. Prioridade para Poções (se ativado)
+                    if state.isPotionsEnabled then
+                        local potions = GetValidItems("WerewolfPotionsLocal")
+                        if #potions > 0 then
+                            for _, data in ipairs(potions) do
+                                if not state.isPotionsEnabled then break end
+                                if data.instance and data.instance.Parent then
+                                    StatusLabel.Text = "Status: Coletando Poção 🧪"
+                                    StatusLabel.TextColor3 = Color3.fromRGB(150, 50, 255)
+                                    TeleportToCFrame(data.cframe)
+                                    task.wait(state.candyDelay)
+                                    didAction = true
+                                end
                             end
                         end
-                    else
+                    end
+
+                    -- 2. Prioridade para Doces (se ativado)
+                    if state.isCandyEnabled then
+                        local candies = GetValidItems("HalloweenCandiesLocal")
+                        if #candies > 0 then
+                            for _, data in ipairs(candies) do
+                                if not state.isCandyEnabled then break end
+                                if data.instance and data.instance.Parent then
+                                    StatusLabel.Text = "Status: Coletando Doce 🍬"
+                                    StatusLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
+                                    TeleportToCFrame(data.cframe)
+                                    task.wait(state.candyDelay)
+                                    didAction = true
+                                end
+                            end
+                        end
+                    end
+
+                    -- 3. Se não houver itens na superfície e o Auto Candies estiver ligado, roda a rota de Waypoints
+                    if not didAction and state.isCandyEnabled then
                         if #state.waypoints > 0 then
-                            if state.currentWpIndex > #state.waypoints then state.currentWpIndex = 1 end
+                            if state.currentWpIndex > #state.waypoints then 
+                                state.currentWpIndex = 1 
+                            end
+                            
                             local wp = state.waypoints[state.currentWpIndex]
                             local targetCFrame = nil
                             
@@ -368,43 +393,20 @@ local function InitCandyWaypointFarm()
 
                             state.currentWpIndex = state.currentWpIndex + 1
 
+                            -- Timer de espera do Waypoint (Respeita o delay configurado e pausa se achar item)
                             local elapsed = 0
-                            while state.isCandyEnabled and elapsed < state.waypointDelay do
-                                if #GetValidItems("HalloweenCandiesLocal") > 0 then break end
+                            while (state.isCandyEnabled or state.isPotionsEnabled) and elapsed < state.waypointDelay do
+                                if state.isCandyEnabled and #GetValidItems("HalloweenCandiesLocal") > 0 then break end
+                                if state.isPotionsEnabled and #GetValidItems("WerewolfPotionsLocal") > 0 then break end
                                 task.wait(0.2)
                                 elapsed = elapsed + 0.2
                             end
                         else
-                            StatusLabel.Text = "Status: Sem Waypoints!"
+                            StatusLabel.Text = "Status: Sem Waypoints Salvos!"
                             StatusLabel.TextColor3 = Color3.fromRGB(220, 80, 80)
                             task.wait(1)
                         end
-                    end
-                end)
-                task.wait(0.1)
-            end
-        end)
-    end
-
-    -- Loop Exclusivo de Poções (WerewolfPotionsLocal)
-    local function StartPotionsLoop()
-        if state.potionsThread then task.cancel(state.potionsThread) end
-        state.potionsThread = task.spawn(function()
-            while state.isPotionsEnabled do
-                pcall(function()
-                    local validPotions = GetValidItems("WerewolfPotionsLocal")
-
-                    if #validPotions > 0 then
-                        for _, data in ipairs(validPotions) do
-                            if not state.isPotionsEnabled then break end
-                            if data.instance and data.instance.Parent then
-                                StatusLabel.Text = "Status: Coletando Poção 🧪"
-                                StatusLabel.TextColor3 = Color3.fromRGB(150, 50, 255)
-                                TeleportToCFrame(data.cframe)
-                                task.wait(state.candyDelay)
-                            end
-                        end
-                    else
+                    elseif not didAction and not state.isCandyEnabled and state.isPotionsEnabled then
                         StatusLabel.Text = "Status: Procurando Poções..."
                         StatusLabel.TextColor3 = Color3.fromRGB(200, 150, 255)
                         task.wait(1)
@@ -412,6 +414,8 @@ local function InitCandyWaypointFarm()
                 end)
                 task.wait(0.1)
             end
+            StatusLabel.Text = "Status: Parado"
+            StatusLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
         end)
     end
 
@@ -421,16 +425,16 @@ local function InitCandyWaypointFarm()
             ToggleCandyBtn.Text = "AUTO CANDIES: ON"
             ToggleCandyBtn.BackgroundColor3 = Color3.fromRGB(60, 35, 120)
             ToggleCandyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            StartCandyLoop()
         else
             ToggleCandyBtn.Text = "AUTO CANDIES: OFF"
             ToggleCandyBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
             ToggleCandyBtn.TextColor3 = Color3.fromRGB(180, 180, 190)
-            if not state.isPotionsEnabled then
-                StatusLabel.Text = "Status: Parado"
-                StatusLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
-            end
-            if state.candyThread then task.cancel(state.candyThread) state.candyThread = nil end
+        end
+
+        if state.isCandyEnabled or state.isPotionsEnabled then
+            StartMasterLoop()
+        else
+            if state.masterThread then task.cancel(state.masterThread) state.masterThread = nil end
         end
     end)
 
@@ -440,16 +444,16 @@ local function InitCandyWaypointFarm()
             TogglePotionsBtn.Text = "AUTO POTIONS: ON"
             TogglePotionsBtn.BackgroundColor3 = Color3.fromRGB(90, 30, 140)
             TogglePotionsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            StartPotionsLoop()
         else
             TogglePotionsBtn.Text = "AUTO POTIONS: OFF"
             TogglePotionsBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
             TogglePotionsBtn.TextColor3 = Color3.fromRGB(180, 180, 190)
-            if not state.isCandyEnabled then
-                StatusLabel.Text = "Status: Parado"
-                StatusLabel.TextColor3 = Color3.fromRGB(140, 140, 150)
-            end
-            if state.potionsThread then task.cancel(state.potionsThread) state.potionsThread = nil end
+        end
+
+        if state.isCandyEnabled or state.isPotionsEnabled then
+            StartMasterLoop()
+        else
+            if state.masterThread then task.cancel(state.masterThread) state.masterThread = nil end
         end
     end)
 
@@ -462,8 +466,7 @@ local function InitCandyWaypointFarm()
     UnloadBtn.MouseButton1Click:Connect(function()
         state.isCandyEnabled = false
         state.isPotionsEnabled = false
-        if state.candyThread then task.cancel(state.candyThread) end
-        if state.potionsThread then task.cancel(state.potionsThread) end
+        if state.masterThread then task.cancel(state.masterThread) end
         for _, conn in ipairs(state.connections) do conn:Disconnect() end
         if ScreenGui then ScreenGui:Destroy() end
     end)
